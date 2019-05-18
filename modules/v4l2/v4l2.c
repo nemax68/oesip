@@ -97,7 +97,6 @@ static void print_video_input(const struct vidsrc_st *st)
 	}
 #endif
 
-printf("## VIDEO %s",input.name);
 	if (-1 == v4l2_ioctl(st->fd, VIDIOC_ENUMINPUT, &input)) {
 		warning("v4l2: VIDIOC_ENUMINPUT: %m\n", errno);
 		return;
