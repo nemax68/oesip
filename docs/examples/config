@@ -72,6 +72,7 @@ module			stdio.so
 #module			cons.so
 #module			evdev.so
 #module			httpd.so
+module			posixque.so
 
 # Audio codec Modules (in order)
 #module			opus.so
@@ -89,7 +90,7 @@ module			g711.so
 #module			isac.so
 
 # Audio filter Modules (in encoding order)
-module			vumeter.so
+#module			vumeter.so
 #module			sndfile.so
 #module			speex_aec.so
 #module			speex_pp.so
@@ -164,13 +165,13 @@ module_app		debug_cmd.so
 #module_app		dtmfio.so
 #module_app		echo.so
 #module_app		gtk.so
-module_app		menu.so
+#module_app		menu.so
 #module_app		mwi.so
 #module_app		presence.so
 #module_app		syslog.so
 #module_app		mqtt.so
 #module_app		ctrl_tcp.so
-module_app		vidloop.so
+#module_app		vidloop.so
 
 
 #------------------------------------------------------------------------------
@@ -185,6 +186,9 @@ http_listen		0.0.0.0:8000 # httpd - server
 ctrl_tcp_listen		0.0.0.0:4444 # ctrl_tcp
 
 evdev_device		/dev/input/event0
+
+posix_cmd_queue_name	/voip_cmd
+posix_evt_queue_name	/voip_event
 
 # Opus codec parameters
 opus_bitrate		28000 # 6000-510000
@@ -221,7 +225,7 @@ ice_mode		full	# {full,lite}
 #menu_bell		yes
 #redial_attempts	0 # Num or <inf>
 #redial_delay		5 # Delay in seconds
-#ringback_disabled	no
+ringback_disabled	no
 #statmode_default	off
 
 # avcodec
