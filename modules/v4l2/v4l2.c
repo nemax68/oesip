@@ -202,13 +202,14 @@ static int init_mmap(struct vidsrc_st *st, const char *dev_name)
 	return 0;
 }
 
-
+//###OPENEYES0001 add fps
 static int v4l2_init_device(struct vidsrc_st *st, const char *dev_name,
-			    int width, int height)
+			    int width, int height, double fps)
 {
 	struct v4l2_capability cap;
 	struct v4l2_format fmt;
 	struct v4l2_fmtdesc fmts;
+	struct v4l2_streamparm parm; //###OPENEYES0001 add fps
 	unsigned int min;
 	const char *pix;
 	int err;
@@ -266,6 +267,17 @@ static int v4l2_init_device(struct vidsrc_st *st, const char *dev_name,
 		warning("v4l2: VIDIOC_S_FMT: %m\n", errno);
 		return errno;
 	}
+
+	//###OPENEYES0001 add fps start
+	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = fps;
+	parm.parm.capture.extendedmode=0;
+	if (-1 == xioctl(st->fd, VIDIOC_S_PARM, &parm)) {
+		warning("v4l2: VIDIOC_S_PARM: %m\n", errno);
+		return errno;
+	}
+	//###OPENEYES0001 add fps end
 
 	/* Note VIDIOC_S_FMT may change width and height. */
 
@@ -490,6 +502,7 @@ static int alloc(struct vidsrc_st **stp, const struct vidsrc *vs,
 {
 	struct vidsrc_st *st;
 	struct mediadev *md;
+	double fps=prm->fps;	//###OPENEYES0001
 	int err;
 
 	(void)ctx;
@@ -526,7 +539,7 @@ static int alloc(struct vidsrc_st **stp, const struct vidsrc *vs,
 	if (err)
 		goto out;
 
-	err = v4l2_init_device(st, dev, size->w, size->h);
+	err = v4l2_init_device(st, dev, size->w, size->h, fps);	//###OPENEYES0001 add fps
 	if (err)
 		goto out;
 

@@ -39,6 +39,9 @@ static int ipc_send_event(struct posix_st *st, struct mbuf *p)
     mqd_t mq;
     size_t len=p->pos;
 
+	//*(p->buf+len)=0;
+	//printf("IPC: [%s]\n",p->buf);
+
     if(len>st->evt.size)
         return ENOMEM;
 
