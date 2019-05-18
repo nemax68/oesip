@@ -874,7 +874,7 @@ int video_alloc(struct video **vp, const struct stream_param *stream_prm,
 	tmr_init(&v->tmr);
 
 	err = stream_alloc(&v->strm, stream_prm,
-			   &cfg->avt, call, sdp_sess, "video", label,
+			   &cfg->avt, call, sdp_sess, MEDIA_VIDEO, label,
 			   mnat, mnat_sess, menc, menc_sess, offerer,
 			   stream_recv_handler, rtcp_handler, v);
 	if (err)
@@ -1270,28 +1270,6 @@ int video_decoder_set(struct video *v, struct vidcodec *vc, int pt_rx,
 	}
 
 	return err;
-}
-
-
-/**
- * Use the next video encoder in the local list of negotiated codecs
- *
- * @param video  Video object
- */
-void video_encoder_cycle(struct video *video)
-{
-	const struct sdp_format *rc = NULL;
-
-	if (!video)
-		return;
-
-	rc = sdp_media_format_cycle(stream_sdpmedia(video_strm(video)));
-	if (!rc) {
-		info("cycle video: no remote codec found\n");
-		return;
-	}
-
-	(void)video_encoder_set(video, rc->data, rc->pt, rc->params);
 }
 
 

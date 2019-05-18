@@ -10,7 +10,7 @@
 #
 
 PROJECT	  := oesip
-VERSION   := 0.6.2
+VERSION   := 0.0.2
 DESCR     := "oesip is a modular SIP User-Agent derived from baresip"
 
 # Verbose and silent build modes

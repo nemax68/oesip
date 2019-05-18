@@ -16,7 +16,7 @@
 *.exe
 *.out
 *.app
-baresip
+oesip
 selftest
 
 # Generated files

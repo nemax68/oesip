@@ -70,7 +70,6 @@ struct mnat_media {
 };
 
 
-static struct mnat *mnat;
 static struct {
 	enum ice_mode mode;
 	enum ice_nomination nom;
@@ -788,7 +787,7 @@ static int ice_start(struct mnat_sess *sess)
 
 
 static int media_alloc(struct mnat_media **mp, struct mnat_sess *sess,
-		       int proto, void *sock1, void *sock2,
+		       struct udp_sock *sock1, struct udp_sock *sock2,
 		       struct sdp_media *sdpm)
 {
 	struct mnat_media *m;
@@ -815,7 +814,7 @@ static int media_alloc(struct mnat_media **mp, struct mnat_sess *sess,
 		role = ICE_ROLE_CONTROLLED;
 
 	err = icem_alloc(&m->icem, ice.mode, role,
-			 proto, ICE_LAYER,
+			 IPPROTO_UDP, ICE_LAYER,
 			 sess->tiebrk, sess->lufrag, sess->lpwd,
 			 conncheck_handler, m);
 	if (err)
@@ -937,6 +936,15 @@ static int update(struct mnat_sess *sess)
 }
 
 
+static struct mnat mnat_ice = {
+	.id      = "ice",
+	.ftag    = "+sip.ice",
+	.sessh   = session_alloc,
+	.mediah  = media_alloc,
+	.updateh = update,
+};
+
+
 static int module_init(void)
 {
 	struct pl pl;
@@ -965,15 +973,15 @@ static int module_init(void)
 		}
 	}
 
-	return mnat_register(&mnat, baresip_mnatl(),
-			     "ice", "+sip.ice",
-			     session_alloc, media_alloc, update);
+	mnat_register(baresip_mnatl(), &mnat_ice);
+
+	return 0;
 }
 
 
 static int module_close(void)
 {
-	mnat = mem_deref(mnat);
+	mnat_unregister(&mnat_ice);
 
 	return 0;
 }

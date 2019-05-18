@@ -507,15 +507,6 @@ static int call_audio_debug(struct re_printf *pf, void *unused)
 }
 
 
-static int call_audioenc_cycle(struct re_printf *pf, void *unused)
-{
-	(void)pf;
-	(void)unused;
-	audio_encoder_cycle(call_audio(ua_call(uag_current())));
-	return 0;
-}
-
-
 static int call_reinvite(struct re_printf *pf, void *unused)
 {
 	(void)pf;
@@ -789,15 +780,6 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 }
 
 
-static int call_videoenc_cycle(struct re_printf *pf, void *unused)
-{
-	(void)pf;
-	(void)unused;
-	video_encoder_cycle(call_video(ua_call(uag_current())));
-	return 0;
-}
-
-
 static int call_video_debug(struct re_printf *pf, void *unused)
 {
 	(void)unused;
@@ -897,19 +879,20 @@ static int set_audio_bitrate(struct re_printf *pf, void *arg)
 
 
 static const struct cmd callcmdv[] = {
-{"reinvite",  'I',        0, "Send re-INVITE",      call_reinvite         },
-{"resume",    'X',        0, "Call resume",         cmd_call_resume       },
-{"audio_debug",'A',       0, "Audio stream",        call_audio_debug      },
-{"audio_cycle",'e',       0, "Cycle audio encoder", call_audioenc_cycle   },
-{"mute",      'm',        0, "Call mute/un-mute",   call_mute             },
-{"transfer",  't',  CMD_PRM, "Transfer call",       call_xfer             },
-{"hold",      'x',        0, "Call hold",           cmd_call_hold         },
-{"",          'H',        0, "Hold previous call",  hold_prev_call        },
-{"",          'L',        0, "Resume previous call",hold_prev_call        },
-{"aubitrate",   0,  CMD_PRM, "Set audio bitrate",   set_audio_bitrate     },
-{"sndcode",   0,    CMD_PRM, "Send Code",           send_code             },
-{"video_cycle", 'E',      0, "Cycle video encoder", call_videoenc_cycle   },
-{"video_debug", 'V',      0, "Video stream",        call_video_debug      },
+
+{"aubitrate",    0,  CMD_PRM, "Set audio bitrate",    set_audio_bitrate    },
+{"audio_debug", 'A',       0, "Audio stream",         call_audio_debug     },
+{"hold",        'x',       0, "Call hold",            cmd_call_hold        },
+{"line",        '@', CMD_PRM, "Set current call <line>", set_current_call  },
+{"mute",        'm',       0, "Call mute/un-mute",    call_mute            },
+{"prevhold",    'H',       0, "Hold previous call",   hold_prev_call       },
+{"prevresume",  'L',       0, "Resume previous call", hold_prev_call       },
+{"reinvite",    'I',       0, "Send re-INVITE",       call_reinvite        },
+{"resume",      'X',       0, "Call resume",          cmd_call_resume      },
+{"sndcode",      0,  CMD_PRM, "Send Code",            send_code            },
+{"statmode",    'S',       0, "Statusmode toggle",    toggle_statmode      },
+{"transfer",    't', CMD_PRM, "Transfer call",        call_xfer            },
+{"video_debug", 'V',       0, "Video stream",         call_video_debug     },
 
 /* Numeric keypad for DTMF events: */
 {NULL, '#',         0, NULL,                  digit_handler         },
@@ -926,8 +909,6 @@ static const struct cmd callcmdv[] = {
 {NULL, '9',         0, NULL,                  digit_handler         },
 {NULL, KEYCODE_REL, 0, NULL,                  digit_handler         },
 
-{NULL,  'S',        0, "Statusmode toggle",       toggle_statmode   },
-{"line",'@',  CMD_PRM, "Set current call <line>", set_current_call  },
 };
 
 
@@ -1059,8 +1040,6 @@ static void ua_event_handler(struct ua *ua, enum ua_event ev,
 	struct player *player = baresip_player();
 	struct call *call2 = NULL;
 	int err;
-
-	(void)call;
 	(void)prm;
 	(void)arg;
 
@@ -1253,6 +1232,12 @@ static int module_init(void)
 {
 	struct pl val;
 	int err;
+
+	menu.bell = true;
+	menu.redial_attempts = 0;
+	menu.redial_delay = 5;
+	menu.ringback_disabled = false;
+	menu.statmode = STATMODE_CALL;
 
 	/*
 	 * Read the config values

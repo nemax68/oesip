@@ -158,6 +158,17 @@ static void stream_destructor(void *arg)
 }
 
 
+static const char *media_name(enum media_type type)
+{
+	switch (type) {
+
+	case MEDIA_AUDIO: return "audio";
+	case MEDIA_VIDEO: return "video";
+	default:          return "???";
+	}
+}
+
+
 static void handle_rtp(struct stream *s, const struct rtp_header *hdr,
 		       struct mbuf *mb)
 {
@@ -369,7 +380,7 @@ static int stream_sock_alloc(struct stream *s, int af)
 int stream_alloc(struct stream **sp, const struct stream_param *prm,
 		 const struct config_avt *cfg,
 		 struct call *call, struct sdp_session *sdp_sess,
-		 const char *name, int label,
+		 enum media_type type, int label,
 		 const struct mnat *mnat, struct mnat_sess *mnat_sess,
 		 const struct menc *menc, struct menc_sess *menc_sess,
 		 bool offerer,
@@ -389,6 +400,7 @@ int stream_alloc(struct stream **sp, const struct stream_param *prm,
 
 	s->cfg   = *cfg;
 	s->call  = call;
+	s->type  = type;
 	s->rtph  = rtph;
 	s->rtcph = rtcph;
 	s->arg   = arg;
@@ -398,7 +410,8 @@ int stream_alloc(struct stream **sp, const struct stream_param *prm,
 		err = stream_sock_alloc(s, prm->af);
 		if (err) {
 			warning("stream: failed to create socket"
-				" for media '%s' (%m)\n", name, err);
+				" for media '%s' (%m)\n",
+				media_name(type), err);
 			goto out;
 		}
 	}
@@ -416,7 +429,7 @@ int stream_alloc(struct stream **sp, const struct stream_param *prm,
 			goto out;
 	}
 
-	err = sdp_media_add(&s->sdp, sdp_sess, name,
+	err = sdp_media_add(&s->sdp, sdp_sess, media_name(type),
 			    s->rtp ? sa_port(rtp_local(s->rtp)) : PORT_DISCARD,
 			    (menc && menc->sdp_proto) ? menc->sdp_proto :
 			    sdp_proto_rtpavp);
@@ -447,7 +460,7 @@ int stream_alloc(struct stream **sp, const struct stream_param *prm,
 		goto out;
 
 	if (mnat && s->rtp) {
-		err = mnat->mediah(&s->mns, mnat_sess, IPPROTO_UDP,
+		err = mnat->mediah(&s->mns, mnat_sess,
 				   rtp_sock(s->rtp),
 				   rtcp_sock(s->rtp),
 				   s->sdp);
@@ -460,9 +473,10 @@ int stream_alloc(struct stream **sp, const struct stream_param *prm,
 		s->mencs = mem_ref(menc_sess);
 		err = menc->mediah(&s->mes, menc_sess,
 				   s->rtp,
-				   IPPROTO_UDP,
 				   rtp_sock(s->rtp),
 				   rtcp_sock(s->rtp),
+				   &s->raddr_rtp,
+				   &s->raddr_rtcp,
 				   s->sdp);
 		if (err)
 			goto out;
@@ -509,7 +523,7 @@ int stream_send(struct stream *s, bool ext, bool marker, int pt, uint32_t ts,
 	if (!s)
 		return EINVAL;
 
-	if (!sa_isset(sdp_media_raddr(s->sdp), SA_ALL))
+	if (!sa_isset(&s->raddr_rtp, SA_ALL))
 		return 0;
 	if (!(sdp_media_rdir(s->sdp) & SDP_SENDONLY))
 		return 0;
@@ -522,7 +536,7 @@ int stream_send(struct stream *s, bool ext, bool marker, int pt, uint32_t ts,
 		pt = s->pt_enc;
 
 	if (pt >= 0) {
-		err = rtp_send(s->rtp, sdp_media_raddr(s->sdp), ext,
+		err = rtp_send(s->rtp, &s->raddr_rtp, ext,
 			       marker, pt, ts, mb);
 		if (err)
 			s->metric_tx.n_err++;
@@ -534,7 +548,6 @@ int stream_send(struct stream *s, bool ext, bool marker, int pt, uint32_t ts,
 
 static void stream_remote_set(struct stream *s)
 {
-	struct sa rtcp;
 	int err;
 
 	if (!s)
@@ -553,10 +566,14 @@ static void stream_remote_set(struct stream *s)
 
 	rtcp_enable_mux(s->rtp, s->rtcp_mux);
 
-	sdp_media_raddr_rtcp(s->sdp, &rtcp);
+	sa_cpy(&s->raddr_rtp, sdp_media_raddr(s->sdp));
 
-	rtcp_start(s->rtp, s->cname,
-		   s->rtcp_mux ? sdp_media_raddr(s->sdp): &rtcp);
+	if (s->rtcp_mux)
+		s->raddr_rtcp = s->raddr_rtp;
+	else
+		sdp_media_raddr_rtcp(s->sdp, &s->raddr_rtcp);
+
+	rtcp_start(s->rtp, s->cname, &s->raddr_rtcp);
 
 	/* Send a dummy RTCP packet to open NAT pinhole */
 	err = rtcp_send_app(s->rtp, "PING", (void *)"PONG", 4);
@@ -588,9 +605,10 @@ void stream_update(struct stream *s)
 
 	if (s->menc && s->menc->mediah) {
 		err = s->menc->mediah(&s->mes, s->mencs, s->rtp,
-				      IPPROTO_UDP,
 				      rtp_sock(s->rtp),
 				      rtcp_sock(s->rtp),
+				      &s->raddr_rtp,
+				      &s->raddr_rtcp,
 				      s->sdp);
 		if (err) {
 			warning("stream: mediaenc update: %m\n", err);
@@ -640,6 +658,7 @@ void stream_hold(struct stream *s, bool hold)
 
 	s->hold = hold;
 	sdp_media_set_ldir(s->sdp, hold ? SDP_SENDONLY : SDP_SENDRECV);
+	stream_reset(s);
 }
 
 
@@ -648,7 +667,10 @@ void stream_set_srate(struct stream *s, uint32_t srate_tx, uint32_t srate_rx)
 	if (!s)
 		return;
 
-	rtcp_set_srate(s->rtp, srate_tx, srate_rx);
+	if (srate_tx)
+		rtcp_set_srate_tx(s->rtp, srate_tx);
+	if (srate_rx)
+		rtcp_set_srate_rx(s->rtp, srate_rx);
 }
 
 
@@ -724,7 +746,6 @@ void stream_set_error_handler(struct stream *strm,
 
 int stream_debug(struct re_printf *pf, const struct stream *s)
 {
-	struct sa rrtcp;
 	int err;
 
 	if (!s)
@@ -734,10 +755,9 @@ int stream_debug(struct re_printf *pf, const struct stream *s)
 			  sdp_dir_name(sdp_media_dir(s->sdp)),
 			  s->pt_enc);
 
-	sdp_media_raddr_rtcp(s->sdp, &rrtcp);
 	err |= re_hprintf(pf, " local: %J, remote: %J/%J\n",
 			  sdp_media_laddr(s->sdp),
-			  sdp_media_raddr(s->sdp), &rrtcp);
+			  &s->raddr_rtp, &s->raddr_rtcp);
 
 	err |= rtp_debug(pf, s->rtp);
 	err |= jbuf_debug(pf, s->jbuf);

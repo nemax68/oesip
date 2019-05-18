@@ -6,6 +6,3 @@
 #  addr-params:
 #    ;presence={none,p2p}
 #
-
-"Echo Server" <sip:echo@creytiv.com>
-"alfredh" <sip:alfredh@home>;presence=p2p

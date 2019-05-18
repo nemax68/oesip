@@ -25,33 +25,6 @@ uint32_t sdp_media_rattr_u32(const struct sdp_media *m, const char *name)
 
 
 /**
- * Get a remote attribute from the SDP. Try the media-level first,
- * and if it does not exist then try session-level.
- *
- * @param s    SDP Session object
- * @param m    SDP Media object
- * @param name Remote attribute name
- *
- * @return Remote attribute value
- */
-const char *sdp_rattr(const struct sdp_session *s, const struct sdp_media *m,
-		      const char *name)
-{
-	const char *x;
-
-	x = sdp_media_rattr(m, name);
-	if (x)
-		return x;
-
-	x = sdp_session_rattr(s, name);
-	if (x)
-		return x;
-
-	return NULL;
-}
-
-
-/**
  * Decode an SDP fingerprint value
  *
  * @param attr SDP attribute value
@@ -109,37 +82,6 @@ bool sdp_media_has_media(const struct sdp_media *m)
 		return sdp_media_rport(m) != 0;
 
 	return false;
-}
-
-
-/**
- * Move the first codec to the bottom of the remote codec list
- *
- * @param m SDP Media object
- *
- * @return SDP format for the first codec
- */
-const struct sdp_format *sdp_media_format_cycle(struct sdp_media *m)
-{
-	struct sdp_format *sf;
-	struct list *lst;
-
- again:
-	sf = (struct sdp_format *)sdp_media_rformat(m, NULL);
-	if (!sf)
-		return NULL;
-
-	lst = sf->le.list;
-
-	/* move top-most codec to end of list */
-	list_unlink(&sf->le);
-	list_append(lst, &sf->le, sf);
-
-	sf = (struct sdp_format *)sdp_media_rformat(m, NULL);
-	if (!str_casecmp(sf->name, telev_rtpfmt))
-		goto again;
-
-	return sf;
 }
 
 

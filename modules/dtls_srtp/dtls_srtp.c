@@ -273,18 +273,13 @@ static void dtls_conn_handler(const struct sa *peer, void *arg)
 }
 
 
-static int component_start(struct comp *comp, struct sdp_media *sdpm)
+static int component_start(struct comp *comp)
 {
 	struct sa raddr;
 	int err = 0;
 
 	if (!comp->app_sock || comp->negotiated || comp->dtls_sock)
 		return 0;
-
-	if (comp->is_rtp)
-		raddr = *sdp_media_raddr(sdpm);
-	else
-		sdp_media_raddr_rtcp(sdpm, &raddr);
 
 	err = dtls_listen(&comp->dtls_sock, NULL,
 			  comp->app_sock, 2, LAYER_DTLS,
@@ -293,6 +288,8 @@ static int component_start(struct comp *comp, struct sdp_media *sdpm)
 		warning("dtls_srtp: dtls_listen failed (%m)\n", err);
 		return err;
 	}
+
+	raddr = comp->raddr;
 
 	if (sa_isset(&raddr, SA_ALL)) {
 
@@ -327,10 +324,10 @@ static int media_start(struct dtls_srtp *st, struct sdp_media *sdpm)
 	if (!sdp_media_has_media(sdpm))
 		return 0;
 
-	err = component_start(&st->compv[0], sdpm);
+	err = component_start(&st->compv[0]);
 
 	if (!st->mux)
-		err |= component_start(&st->compv[1], sdpm);
+		err |= component_start(&st->compv[1]);
 
 	if (err)
 		return err;
@@ -350,8 +347,10 @@ static void timeout(void *arg)
 
 
 static int media_alloc(struct menc_media **mp, struct menc_sess *sess,
-		       struct rtp_sock *rtp, int proto,
-		       void *rtpsock, void *rtcpsock,
+		       struct rtp_sock *rtp,
+		       struct udp_sock *rtpsock, struct udp_sock *rtcpsock,
+		       const struct sa *raddr_rtp,
+		       const struct sa *raddr_rtcp,
 		       struct sdp_media *sdpm)
 {
 	struct dtls_srtp *st;
@@ -360,7 +359,7 @@ static int media_alloc(struct menc_media **mp, struct menc_sess *sess,
 	unsigned i;
 	(void)rtp;
 
-	if (!mp || !sess || proto != IPPROTO_UDP)
+	if (!mp || !sess)
 		return EINVAL;
 
 	st = (struct dtls_srtp *)*mp;
@@ -381,6 +380,10 @@ static int media_alloc(struct menc_media **mp, struct menc_sess *sess,
 
 	st->compv[0].is_rtp = true;
 	st->compv[1].is_rtp = false;
+
+	st->compv[0].raddr = *raddr_rtp;
+	if (raddr_rtcp)
+		st->compv[1].raddr = *raddr_rtcp;
 
 	err = sdp_media_set_alt_protos(st->sdpm, 4,
 				       "RTP/SAVP",

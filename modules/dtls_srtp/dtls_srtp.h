@@ -17,13 +17,13 @@ struct comp {
 	struct srtp_stream *tx;
 	struct srtp_stream *rx;
 	struct udp_helper *uh_srtp;
+	struct sa raddr;
 	void *app_sock;
 	bool negotiated;
 	bool is_rtp;
 };
 
 /* dtls.c */
-int dtls_print_sha1_fingerprint(struct re_printf *pf, const struct tls *tls);
 int dtls_print_sha256_fingerprint(struct re_printf *pf, const struct tls *tls);
 
 

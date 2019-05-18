@@ -16,9 +16,6 @@ struct mnat_sess {
 };
 
 
-static struct mnat *mnat;
-
-
 static void sess_destructor(void *data)
 {
 	struct mnat_sess *sess = data;
@@ -73,8 +70,8 @@ static int mnat_session_alloc(struct mnat_sess **sessp, struct dnsc *dnsc,
 
 
 static int mnat_media_alloc(struct mnat_media **mp, struct mnat_sess *sess,
-			   int proto, void *sock1, void *sock2,
-			   struct sdp_media *sdpm)
+			    struct udp_sock *sock1, struct udp_sock *sock2,
+			    struct sdp_media *sdpm)
 {
 	int err;
 
@@ -82,9 +79,6 @@ static int mnat_media_alloc(struct mnat_media **mp, struct mnat_sess *sess,
 	(void)sess;
 	(void)sock1;
 	(void)sock2;
-
-	if (proto != IPPROTO_UDP)
-		return EPROTONOSUPPORT;
 
 	err = sdp_media_set_lattr(sdpm, true, "xnat", NULL);
 	if (err)
@@ -94,14 +88,22 @@ static int mnat_media_alloc(struct mnat_media **mp, struct mnat_sess *sess,
 }
 
 
+static struct mnat mnat_mock = {
+	.id     = "XNAT",
+	.sessh  = mnat_session_alloc,
+	.mediah = mnat_media_alloc,
+};
+
+
 int mock_mnat_register(struct list *mnatl)
 {
-	return mnat_register(&mnat, mnatl, "XNAT", NULL,
-			     mnat_session_alloc, mnat_media_alloc, NULL);
+	mnat_register(mnatl, &mnat_mock);
+
+	return 0;
 }
 
 
 void mock_mnat_unregister(void)
 {
-	mnat = mem_deref(mnat);
+	mnat_unregister(&mnat_mock);
 }

@@ -57,7 +57,6 @@ static struct {
 	bool use_udp;                  /**< Use UDP transport               */
 	bool use_tcp;                  /**< Use TCP transport               */
 	bool use_tls;                  /**< Use TLS transport               */
-	bool prefer_ipv6;              /**< Force IPv6 transport            */
 	bool delayed_close;
 	sip_msg_h *subh;               /**< Subscribe handler               */
 	ua_exit_h *exith;              /**< UA Exit handler                 */
@@ -78,7 +77,6 @@ static struct {
 	true,
 	true,
 	true,
-	false,
 	false,
 	NULL,
 	NULL,
@@ -267,6 +265,38 @@ bool ua_isregistered(const struct ua *ua)
 	}
 
 	return false;
+}
+
+
+/**
+ * Destroy the user-agent, terminate all active calls and
+ * send the SHUTDOWN event.
+ *
+ * @param ua User-Agent object
+ *
+ * @return Number of remaining references
+ */
+unsigned ua_destroy(struct ua *ua)
+{
+	unsigned nrefs;
+
+	if (!ua)
+		return 0;
+
+	list_unlink(&ua->le);
+
+	/* send the shutdown event */
+	ua_event(ua, UA_EVENT_SHUTDOWN, NULL, NULL);
+
+	/* terminate all calls now */
+	list_flush(&ua->calls);
+
+	/* number of remaining references (excluding this one) */
+	nrefs = mem_nrefs(ua) - 1;
+
+	mem_deref(ua);
+
+	return nrefs;
 }
 
 
@@ -496,14 +526,14 @@ static void handle_options(struct ua *ua, const struct sip_msg *msg)
 
 	err = sip_treplyf(NULL, NULL, uag.sip,
 			  msg, true, 200, "OK",
-			  "Allow: %s\r\n"
+			  "Allow: %H\r\n"
 			  "%H"
 			  "%H"
 			  "%s"
 			  "Content-Length: %zu\r\n"
 			  "\r\n"
 			  "%b",
-			  ua_allowed_methods(ua),
+			  ua_print_allowed, ua,
 			  ua_print_supported, ua,
 			  sip_contact_print, &contact,
 			  desc ? "Content-Type: application/sdp\r\n" : "",
@@ -646,11 +676,7 @@ int ua_alloc(struct ua **uap, const char *aor)
 
 	list_init(&ua->calls);
 
-#if HAVE_INET6
-	ua->af   = uag.prefer_ipv6 ? AF_INET6 : AF_INET;
-#else
-	ua->af   = AF_INET;
-#endif
+	ua->af   = net_af(baresip_network());
 
 	/* Decode SIP address */
 	if (uag.eprm) {
@@ -671,11 +697,11 @@ int ua_alloc(struct ua **uap, const char *aor)
 		goto out;
 
 	if (ua->acc->sipnat) {
-		ua_printf(ua, "Using sipnat: `%s'\n", ua->acc->sipnat);
+		ua_printf(ua, "Using sipnat: '%s'\n", ua->acc->sipnat);
 	}
 
 	if (ua->acc->mnat) {
-		ua_printf(ua, "Using medianat `%s'\n",
+		ua_printf(ua, "Using medianat '%s'\n",
 			  ua->acc->mnat->id);
 
 		if (0 == str_casecmp(ua->acc->mnat->id, "ice"))
@@ -683,7 +709,7 @@ int ua_alloc(struct ua **uap, const char *aor)
 	}
 
 	if (ua->acc->menc) {
-		ua_printf(ua, "Using media encryption `%s'\n",
+		ua_printf(ua, "Using media encryption '%s'\n",
 			  ua->acc->menc->id);
 	}
 
@@ -1269,7 +1295,8 @@ static int ua_add_transp(struct network *net)
 {
 	int err = 0;
 
-	if (!uag.prefer_ipv6) {
+	if (net_af(net) == AF_INET) {
+
 		if (sa_isset(net_laddr_af(net, AF_INET), SA_ADDR))
 			err |= add_transp_af(net_laddr_af(net, AF_INET));
 	}
@@ -1474,12 +1501,10 @@ static bool sub_handler(const struct sip_msg *msg, void *arg)
  * @param udp         Enable UDP transport
  * @param tcp         Enable TCP transport
  * @param tls         Enable TLS transport
- * @param prefer_ipv6 Prefer IPv6 flag
  *
  * @return 0 if success, otherwise errorcode
  */
-int ua_init(const char *software, bool udp, bool tcp, bool tls,
-	    bool prefer_ipv6)
+int ua_init(const char *software, bool udp, bool tcp, bool tls)
 {
 	struct config *cfg = conf_config();
 	struct network *net = baresip_network();
@@ -1497,7 +1522,6 @@ int ua_init(const char *software, bool udp, bool tcp, bool tls,
 	uag.use_udp = udp;
 	uag.use_tcp = tcp;
 	uag.use_tls = tls;
-	uag.prefer_ipv6 = prefer_ipv6;
 
 	list_init(&uag.ual);
 
@@ -1576,15 +1600,9 @@ void ua_stop_all(bool forced)
 		struct ua *ua = le->data;
 		le = le->next;
 
-		ua_event(ua, UA_EVENT_SHUTDOWN, NULL, NULL);
-
-		if (mem_nrefs(ua) > 1) {
+		if (ua_destroy(ua) != 0) {
 			++ext_ref;
 		}
-
-		list_unlink(&ua->le);
-		list_flush(&ua->calls);
-		mem_deref(ua);
 	}
 
 	if (ext_ref) {
@@ -1941,18 +1959,28 @@ struct list *uag_list(void)
 
 
 /**
- * Return list of methods supported by the UA
+ * Print list of methods allowed by the UA
  *
- * @param ua User-Agent
+ * @param pf  Print function
+ * @param ua  User-Agent
  *
- * @return String of supported methods
+ * @return 0 if success, otherwise errorcode
  */
-const char *ua_allowed_methods(const struct ua *ua)
+int ua_print_allowed(struct re_printf *pf, const struct ua *ua)
 {
-	return ua->acc->refer ? "INVITE,ACK,BYE,CANCEL,OPTIONS,"
-		"NOTIFY,SUBSCRIBE,INFO,MESSAGE,REFER" :
-		"INVITE,ACK,BYE,CANCEL,OPTIONS,"
-		"NOTIFY,SUBSCRIBE,INFO,MESSAGE";
+	int err;
+
+	if (!ua || !ua->acc)
+		return 0;
+
+	err = re_hprintf(pf,
+			 "INVITE,ACK,BYE,CANCEL,OPTIONS,"
+			 "NOTIFY,SUBSCRIBE,INFO,MESSAGE");
+
+	if (ua->acc->refer)
+		err |= re_hprintf(pf, ",REFER");
+
+	return err;
 }
 
 
@@ -1968,6 +1996,9 @@ int ua_print_supported(struct re_printf *pf, const struct ua *ua)
 {
 	size_t i;
 	int err;
+
+	if (!ua)
+		return 0;
 
 	err = re_hprintf(pf, "Supported:");
 

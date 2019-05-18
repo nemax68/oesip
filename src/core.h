@@ -188,15 +188,6 @@ int mctrl_handle_media_control(struct pl *body, bool *pfu);
  * Media NAT traversal
  */
 
-struct mnat {
-	struct le le;
-	const char *id;
-	const char *ftag;
-	mnat_sess_h *sessh;
-	mnat_media_h *mediah;
-	mnat_update_h *updateh;
-};
-
 const struct mnat *mnat_find(const struct list *mnatl, const char *id);
 
 
@@ -284,12 +275,16 @@ int rtpext_decode(struct rtpext *ext, struct mbuf *mb);
  */
 
 int sdp_decode_multipart(const struct pl *ctype_prm, struct mbuf *mb);
-const struct sdp_format *sdp_media_format_cycle(struct sdp_media *m);
 
 
 /*
  * Stream
  */
+
+enum media_type {
+	MEDIA_AUDIO = 0,
+	MEDIA_VIDEO,
+};
 
 struct rtp_header;
 
@@ -320,6 +315,9 @@ struct stream {
 	struct menc_media *mes;  /**< Media Encryption media state          */
 	struct metric metric_tx; /**< Metrics for transmit                  */
 	struct metric metric_rx; /**< Metrics for receiving                 */
+	struct sa raddr_rtp;
+	struct sa raddr_rtcp;
+	enum media_type type;
 	char *cname;             /**< RTCP Canonical end-point identifier   */
 	uint32_t ssrc_rx;        /**< Incoming syncronizing source          */
 	uint32_t pseq;           /**< Sequence number for incoming RTP      */
@@ -342,7 +340,7 @@ struct stream {
 int  stream_alloc(struct stream **sp, const struct stream_param *prm,
 		  const struct config_avt *cfg,
 		  struct call *call, struct sdp_session *sdp_sess,
-		  const char *name, int label,
+		  enum media_type type, int label,
 		  const struct mnat *mnat, struct mnat_sess *mnat_sess,
 		  const struct menc *menc, struct menc_sess *menc_sess,
 		  bool offerer,
@@ -374,7 +372,7 @@ struct ua;
 void         ua_printf(const struct ua *ua, const char *fmt, ...);
 
 struct tls  *uag_tls(void);
-const char  *ua_allowed_methods(const struct ua *ua);
+int ua_print_allowed(struct re_printf *pf, const struct ua *ua);
 
 
 /*
@@ -426,3 +424,4 @@ int      timestamp_wrap(uint32_t ts_new, uint32_t ts_old);
 void     timestamp_set(struct timestamp_recv *ts, uint32_t rtp_ts);
 uint64_t timestamp_duration(const struct timestamp_recv *ts);
 uint64_t timestamp_calc_extended(uint32_t num_wraps, uint32_t ts);
+double   timestamp_calc_seconds(uint64_t ts, uint32_t clock_rate);

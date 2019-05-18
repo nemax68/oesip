@@ -107,7 +107,7 @@ static int reg(enum sip_transp tp)
 	char aor[256];
 	int err;
 
-	memset(&t, 0, sizeof t);
+	memset(&t, 0, sizeof(t));
 
 	err = sip_server_alloc(&t.srvv[0], sip_server_exit_handler, NULL);
 	if (err) {
@@ -157,7 +157,7 @@ int test_ua_register(void)
 {
 	int err = 0;
 
-	err = ua_init("test", true, true, true, false);
+	err = ua_init("test", true, true, true);
 	TEST_ERR(err);
 
 	err |= reg(SIP_TRANSP_UDP);
@@ -263,7 +263,7 @@ static int reg_dns(enum sip_transp tp)
 	size_t i;
 	int err;
 
-	memset(&t, 0, sizeof t);
+	memset(&t, 0, sizeof(t));
 
 	/*
 	 * Setup server-side mocks:
@@ -323,7 +323,7 @@ static int reg_dns(enum sip_transp tp)
 	 * Start SIP client:
 	 */
 
-	err = ua_init("test", true, true, true, false);
+	err = ua_init("test", true, true, true);
 	TEST_ERR(err);
 
 	err = ua_alloc(&t.ua, aor);
@@ -397,7 +397,7 @@ static int reg_auth(enum sip_transp tp)
 	char aor[256];
 	int err;
 
-	memset(&t, 0, sizeof t);
+	memset(&t, 0, sizeof(t));
 
 	err = sip_server_alloc(&t.srvv[0], sip_server_exit_handler, NULL);
 	if (err) {
@@ -471,7 +471,7 @@ int test_ua_register_auth(void)
 {
 	int err;
 
-	err = ua_init("test", true, true, true, false);
+	err = ua_init("test", true, true, true);
 	TEST_ERR(err);
 
 	err |= reg_auth(SIP_TRANSP_UDP);
@@ -506,7 +506,7 @@ static int reg_auth_dns(enum sip_transp tp)
 	unsigned total_req = 0;
 	int err;
 
-	memset(&t, 0, sizeof t);
+	memset(&t, 0, sizeof(t));
 
 	/*
 	 * Setup server-side mocks:
@@ -582,7 +582,7 @@ static int reg_auth_dns(enum sip_transp tp)
 	 * Start SIP client:
 	 */
 
-	err = ua_init("test", true, true, true, false);
+	err = ua_init("test", true, true, true);
 	TEST_ERR(err);
 
 	err = ua_alloc(&t.ua, aor);
@@ -720,7 +720,7 @@ static int test_ua_options_base(enum sip_transp transp)
 	err = ua_init("test",
 		      transp == SIP_TRANSP_UDP,
 		      transp == SIP_TRANSP_TCP,
-		      false, false);
+		      false);
 	TEST_ERR(err);
 
 	err = sip_transp_laddr(uag_sip(), &laddr, transp, NULL);
@@ -743,7 +743,10 @@ static int test_ua_options_base(enum sip_transp transp)
 	if (err)
 		goto out;
 
-	TEST_ERR(t.err);
+	if (t.err) {
+		err = t.err;
+		goto out;
+	}
 
 	/* verify after test is complete */
 	ASSERT_EQ(1, t.n_resp);

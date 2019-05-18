@@ -275,6 +275,7 @@ struct config_avt {
 
 /** Network Configuration */
 struct config_net {
+	bool prefer_ipv6;       /**< Prefer IPv6 over IPv4          */
 	char ifname[64];        /**< Bind to interface (optional)   */
 	struct {
 		char addr[64];
@@ -594,9 +595,11 @@ typedef int  (menc_sess_h)(struct menc_sess **sessp, struct sdp_session *sdp,
 			   menc_error_h *errorh, void *arg);
 
 typedef int  (menc_media_h)(struct menc_media **mp, struct menc_sess *sess,
-			    struct rtp_sock *rtp, int proto,
-			    void *rtpsock, void *rtcpsock,
-			    struct sdp_media *sdpm);
+			   struct rtp_sock *rtp,
+			   struct udp_sock *rtpsock, struct udp_sock *rtcpsock,
+			   const struct sa *raddr_rtp,
+			   const struct sa *raddr_rtcp,
+			   struct sdp_media *sdpm);
 
 struct menc {
 	struct le le;
@@ -620,7 +623,7 @@ struct network;
 
 typedef void (net_change_h)(void *arg);
 
-int  net_alloc(struct network **netp, const struct config_net *cfg, int af);
+int  net_alloc(struct network **netp, const struct config_net *cfg);
 int  net_use_nameserver(struct network *net, const struct sa *ns);
 void net_change(struct network *net, uint32_t interval,
 		net_change_h *ch, void *arg);
@@ -716,6 +719,7 @@ int  ua_update_account(struct ua *ua);
 int  ua_register(struct ua *ua);
 void ua_unregister(struct ua *ua);
 bool ua_isregistered(const struct ua *ua);
+unsigned ua_destroy(struct ua *ua);
 void ua_pub_gruu_set(struct ua *ua, const struct pl *pval);
 const char     *ua_aor(const struct ua *ua);
 const char     *ua_cuser(const struct ua *ua);
@@ -741,8 +745,7 @@ int  ua_call_alloc(struct call **callp, struct ua *ua,
 
 
 /* One instance */
-int  ua_init(const char *software, bool udp, bool tcp, bool tls,
-	     bool prefer_ipv6);
+int  ua_init(const char *software, bool udp, bool tcp, bool tls);
 void ua_close(void);
 void ua_stop_all(bool forced);
 void uag_set_exit_handler(ua_exit_h *exith, void *arg);
@@ -1142,7 +1145,6 @@ bool audio_ismuted(const struct audio *a);
 void audio_set_devicename(struct audio *a, const char *src, const char *play);
 int  audio_set_source(struct audio *au, const char *mod, const char *device);
 int  audio_set_player(struct audio *au, const char *mod, const char *device);
-void audio_encoder_cycle(struct audio *audio);
 int  audio_level_get(const struct audio *au, double *level);
 int  audio_debug(struct re_printf *pf, const struct audio *a);
 struct stream *audio_strm(const struct audio *au);
@@ -1171,7 +1173,6 @@ int   video_set_fullscreen(struct video *v, bool fs);
 void  video_vidsrc_set_device(struct video *v, const char *dev);
 int   video_set_source(struct video *v, const char *name, const char *dev);
 void  video_set_devicename(struct video *v, const char *src, const char *disp);
-void  video_encoder_cycle(struct video *video);
 int   video_debug(struct re_printf *pf, const struct video *v);
 uint64_t video_calc_rtp_timestamp_fix(uint64_t timestamp);
 double video_calc_seconds(uint64_t rtp_ts);
@@ -1220,15 +1221,22 @@ typedef int (mnat_sess_h)(struct mnat_sess **sessp, struct dnsc *dnsc,
 			  mnat_estab_h *estabh, void *arg);
 
 typedef int (mnat_media_h)(struct mnat_media **mp, struct mnat_sess *sess,
-			   int proto, void *sock1, void *sock2,
+			   struct udp_sock *sock1, struct udp_sock *sock2,
 			   struct sdp_media *sdpm);
 
 typedef int (mnat_update_h)(struct mnat_sess *sess);
 
-int mnat_register(struct mnat **mnatp, struct list *mnatl,
-		  const char *id, const char *ftag,
-		  mnat_sess_h *sessh, mnat_media_h *mediah,
-		  mnat_update_h *updateh);
+struct mnat {
+	struct le le;
+	const char *id;
+	const char *ftag;
+	mnat_sess_h *sessh;
+	mnat_media_h *mediah;
+	mnat_update_h *updateh;
+};
+
+void mnat_register(struct list *mnatl, struct mnat *mnat);
+void mnat_unregister(struct mnat *mnat);
 
 
 /*
@@ -1239,8 +1247,6 @@ bool sdp_media_has_media(const struct sdp_media *m);
 int  sdp_fingerprint_decode(const char *attr, struct pl *hash,
 			    uint8_t *md, size_t *sz);
 uint32_t sdp_media_rattr_u32(const struct sdp_media *sdpm, const char *name);
-const char *sdp_rattr(const struct sdp_session *s, const struct sdp_media *m,
-		      const char *name);
 
 
 /*
@@ -1372,7 +1378,7 @@ uint64_t tmr_jiffies_usec(void);
  * Baresip instance
  */
 
-int  baresip_init(struct config *cfg, bool prefer_ipv6);
+int  baresip_init(struct config *cfg);
 void baresip_close(void);
 struct network *baresip_network(void);
 struct contacts *baresip_contacts(void);

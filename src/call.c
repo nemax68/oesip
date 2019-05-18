@@ -21,11 +21,6 @@
 #define FOREACH_STREAM						\
 	for (le = call->streaml.head; le; le = le->next)
 
-/** Call constants */
-enum {
-	PTIME           = 20,    /**< Packet time for audio               */
-};
-
 
 /** Call States */
 enum state {
@@ -428,19 +423,7 @@ static void video_error_handler(int err, const char *str, void *arg)
 }
 
 
-static void menc_error_handler(int err, void *arg)
-{
-	struct call *call = arg;
-	MAGIC_CHECK(call);
-
-	warning("call: mediaenc '%s' error: %m\n", call->acc->mencid, err);
-
-	call_stream_stop(call);
-	call_event_handler(call, CALL_EVENT_CLOSED, "mediaenc failed");
-}
-
-
-static void menc_event_handler(const enum menc_event event,
+static void menc_event_handler(enum menc_event event,
 			       const char *prm, void *arg)
 {
 	struct call *call = arg;
@@ -451,6 +434,18 @@ static void menc_event_handler(const enum menc_event event,
 				   prm);
 	else
 		call_event_handler(call, CALL_EVENT_MENC, "%u", event);
+}
+
+
+static void menc_error_handler(int err, void *arg)
+{
+	struct call *call = arg;
+	MAGIC_CHECK(call);
+
+	warning("call: mediaenc '%s' error: %m\n", call->acc->mencid, err);
+
+	call_stream_stop(call);
+	call_event_handler(call, CALL_EVENT_CLOSED, "mediaenc failed");
 }
 
 
@@ -847,8 +842,8 @@ int call_progress(struct call *call)
 		return err;
 
 	err = sipsess_progress(call->sess, 183, "Session Progress",
-			       desc, "Allow: %s\r\n",
-			       ua_allowed_methods(call->ua));
+			       desc, "Allow: %H\r\n",
+			       ua_print_allowed, call->ua);
 
 	if (!err)
 		call_stream_start(call, false);
@@ -887,7 +882,7 @@ int call_answer(struct call *call, uint16_t scode)
 		return err;
 
 	err = sipsess_answer(call->sess, scode, "Answering", desc,
-			     "Allow: %s\r\n", ua_allowed_methods(call->ua));
+			     "Allow: %H\r\n", ua_print_allowed, call->ua);
 
 	mem_deref(desc);
 
@@ -1199,6 +1194,7 @@ static int sipsess_offer_handler(struct mbuf **descp,
 		err = update_media(call);
 		if (err)
 			return err;
+
 	}
 
 	/* Encode SDP Answer */
@@ -1381,7 +1377,7 @@ static void sipsess_refer_handler(struct sip *sip, const struct sip_msg *msg,
 			      ua_cuser(call->ua), "message/sipfrag",
 			      auth_handler, call->acc, true,
 			      sipnot_close_handler, call,
-			      "Allow: %s\r\n", ua_allowed_methods(call->ua));
+			      "Allow: %H\r\n", ua_print_allowed, call->ua);
 	if (err) {
 		warning("call: refer: sipevent_accept failed: %m\n", err);
 		return;
@@ -1529,8 +1525,8 @@ int call_accept(struct call *call, struct sipsess_sock *sess_sock,
 			     sipsess_estab_handler, sipsess_info_handler,
 			     call->acc->refer ? sipsess_refer_handler : NULL,
 			     sipsess_close_handler,
-			     call, "Allow: %s\r\n",
-			     ua_allowed_methods(call->ua));
+			     call, "Allow: %H\r\n",
+			     ua_print_allowed, call->ua);
 
 	if (err) {
 		warning("call: sipsess_accept: %m\n", err);
@@ -1650,8 +1646,8 @@ static int send_invite(struct call *call)
 			      sipsess_info_handler,
 			      call->acc->refer ? sipsess_refer_handler : NULL,
 			      sipsess_close_handler, call,
-			      "Allow: %s\r\n%H%H",
-			      ua_allowed_methods(call->ua),
+			      "Allow: %H\r\n%H%H",
+			      ua_print_allowed, call->ua,
 			      ua_print_supported, call->ua,
 			      custom_hdrs_print, &call->custom_hdrs);
 	if (err) {

@@ -66,7 +66,7 @@ struct fixture {
 	f->b.fix = f;							\
 	f->c.fix = f;							\
 									\
-	err = ua_init("test", true, true, false, false);		\
+	err = ua_init("test", true, true, false);			\
 	TEST_ERR(err);							\
 									\
 	f->magic = MAGIC;						\
@@ -1000,11 +1000,6 @@ int test_call_format_float(void)
 
 	err = test_media_base(AUDIO_MODE_POLL);
 	ASSERT_EQ(0, err);
-
-#ifdef HAVE_PTHREAD
-	err = test_media_base(AUDIO_MODE_THREAD);
-	ASSERT_EQ(0, err);
-#endif
 
 	conf_config()->audio.txmode = AUDIO_MODE_POLL;
 
