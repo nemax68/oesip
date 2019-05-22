@@ -45,7 +45,7 @@ static void syslog_handler(int level, const char *p, size_t len, void *arg)
 
 static int module_init(void)
 {
-	openlog("baresip", LOG_NDELAY | LOG_PID, LOG_LOCAL0);
+	openlog("oesip", LOG_NDELAY | LOG_PID, LOG_LOCAL0);
 
 	dbg_init(DBG_INFO, DBG_NONE);
 	dbg_handler_set(syslog_handler, NULL);

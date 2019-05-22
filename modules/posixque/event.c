@@ -51,7 +51,7 @@ static int ipc_send_event(struct posix_st *st, struct mbuf *p)
 		return ENODEV;
 
 	if(	mq_send(mq, (char *)p->buf, len, 0) )
-		return ENODEV;
+		return errno;
 
 	mq_close(mq);
 
